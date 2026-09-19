@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=PDF Merge
+Comment=Arrange PDF pages and export one document
+Exec=pdf-merge %F
+Icon=pdf-merge
+Terminal=false
+Categories=Office;Utility;
+MimeType=application/pdf;
+Keywords=PDF;Merge;Combine;Pages;
+StartupNotify=true

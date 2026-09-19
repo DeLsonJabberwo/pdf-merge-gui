@@ -2,6 +2,13 @@
 
 A native desktop app for arranging PDFs and exporting one document. C++20, Qt 6 Widgets, Qt PDF, and qpdf. All processing happens locally.
 
+## AI Notice
+
+**NOTICE**: This was created using LLM-generated code. This is not meant to be a hand-crafted artisanal codebase. It's meant to be exactly what it is.
+I made this real quick because it was annoying me that good tools for this aren't widely available and I have friends that aren't going to use a terminal utility.
+If you have some moral quandry with AI-generated code, don't use this. If you want a non-LLM system, I hand-crafted a CLI utility at [DeLsonJabberwo/pdf-merge](https://github.com/DeLsonJabberwo/pdf-merge).
+Otherwise, go deal with this problem another way.
+
 ## Current implementation
 
 - Drop PDFs onto the window or click to browse. Multiple files can be imported together.

@@ -64,7 +64,7 @@ jobs:
           # python-is-python3: install-qt-action runs its pre-check with
           # "python", which does not exist in the bare 22.04 container.
           apt-get install -y build-essential ninja-build patchelf libfuse2 file curl sudo python3 python-is-python3 python3-pip
-          pip3 install --prefix /usr/local "cmake>=3.24,<4"
+          pip3 install "cmake>=3.24,<4"
       - name: Install Qt
         uses: jurplel/install-qt-action@bcb88e3bed2e992f5f9e24c0f9e364a231d278eb # v4.4.0
         with:
@@ -175,6 +175,11 @@ jobs:
           cmake --install build-release --config Release --prefix "$pwd/dist"
           New-Item -ItemType Directory release-assets
           cpack --config build-release/CPackConfig.cmake -B release-assets -C Release
+          $cpackExit = $LASTEXITCODE
+          if ($cpackExit -ne 0) {
+            Get-Content release-assets/_CPack_Packages/win64/NSIS/NSISOutput.log -ErrorAction SilentlyContinue
+            exit $cpackExit
+          }
       - name: Check packaged application
         shell: pwsh
         run: |

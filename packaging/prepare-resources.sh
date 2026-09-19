@@ -44,7 +44,7 @@ collect_dependency_notices qpdf \
     https://github.com/qpdf/qpdf/releases/download/v12.2.0/qpdf-12.2.0.tar.gz \
     b3d1575b2218badc3549d6977524bb0f8c468c6528eebc8967bbe3078cf2cace
 collect_dependency_notices zlib \
-    https://zlib.net/fossils/zlib-1.3.1.tar.gz \
+    https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz \
     9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
 collect_dependency_notices libjpeg-turbo \
     https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.0/libjpeg-turbo-3.1.0.tar.gz \
@@ -57,7 +57,7 @@ with compatible modified builds. PDF Merge's MIT license does not restrict
 reverse engineering for debugging modifications to those libraries.
 
 qpdf 12.2.0: https://github.com/qpdf/qpdf/releases/tag/v12.2.0
-zlib 1.3.1: https://zlib.net/fossils/zlib-1.3.1.tar.gz
+zlib 1.3.1: https://github.com/madler/zlib/releases/tag/v1.3.1
 libjpeg-turbo 3.1.0: https://github.com/libjpeg-turbo/libjpeg-turbo/releases/tag/3.1.0
 qpdf uses its native crypto provider and statically linked zlib/libjpeg-turbo.
 The release dependency recipes are in packaging/dependencies/CMakeLists.txt.

@@ -46,12 +46,12 @@ if(WIN32)
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
     set(CPACK_NSIS_MODIFY_PATH OFF)
     set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "PDFMerge")
-    # Register PDF Merge with Explorer's Open with menu. Keep the commands in
-    # raw NSIS files so CPack cannot corrupt their nested quotes and backslashes.
-    set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS
-        "!include \"${CMAKE_CURRENT_LIST_DIR}/windows-install.nsh\"")
-    set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS
-        "!include \"${CMAKE_CURRENT_LIST_DIR}/windows-uninstall.nsh\"")
+    # Embed the raw NSIS files so the generated installer has no source-tree
+    # include paths and CPack cannot corrupt their quotes and backslashes.
+    file(READ "${CMAKE_CURRENT_LIST_DIR}/windows-install.nsh"
+        CPACK_NSIS_EXTRA_INSTALL_COMMANDS)
+    file(READ "${CMAKE_CURRENT_LIST_DIR}/windows-uninstall.nsh"
+        CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS)
 elseif(APPLE)
     set(CPACK_GENERATOR "DragNDrop")
     set(CPACK_PACKAGE_FILE_NAME "pdf-merge-${PROJECT_VERSION}-macos-${PDFMERGE_PACKAGE_ARCH}")

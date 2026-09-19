@@ -29,6 +29,9 @@ set(CPACK_RESOURCE_FILE_LICENSE "${PROJECT_SOURCE_DIR}/LICENSE")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "PDF Merge")
 set(CPACK_PACKAGE_EXECUTABLES "pdf-merge" "PDF Merge")
 set(CPACK_MONOLITHIC_INSTALL ON)
+# Preserve quotes, backslashes, and NSIS variables when CPack writes these
+# settings into CPackConfig.cmake.
+set(CPACK_VERBATIM_VARIABLES ON)
 if(WIN32)
     set(CPACK_GENERATOR "ZIP;NSIS")
     set(CPACK_PACKAGE_FILE_NAME "pdf-merge-${PROJECT_VERSION}-windows-${PDFMERGE_PACKAGE_ARCH}")

@@ -72,6 +72,9 @@ jobs:
           arch: linux_gcc_64
           modules: qtpdf
           cache: true
+          # The hosted Python requires newer glibc than the Ubuntu 22.04
+          # container. Use the container's Python installed above instead.
+          setup-python: false
       - name: Build qpdf
         run: |
           cmake -S packaging/dependencies -B build-dependencies -G Ninja \

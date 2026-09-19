@@ -62,15 +62,19 @@ if(UNIX AND NOT APPLE)
 endif()
 
 # Release builds use qpdf with static zlib/jpeg dependencies. Qt's deployment
-# tools handle Qt and, on macOS, qpdf's dylib. Windows needs qpdf copied explicitly.
+# tools handle Qt. Windows needs qpdf copied explicitly, while macdeployqt needs
+# qpdf's library directory so it can find and bundle the dylib.
 if(WIN32 OR APPLE)
     if(WIN32)
         get_target_property(qpdf_type qpdf::libqpdf TYPE)
         if(qpdf_type STREQUAL "SHARED_LIBRARY")
             install(FILES $<TARGET_FILE:qpdf::libqpdf> DESTINATION ${CMAKE_INSTALL_BINDIR})
         endif()
+        qt_generate_deploy_app_script(TARGET pdf-merge OUTPUT_SCRIPT deploy_script)
+    else()
+        qt_generate_deploy_app_script(TARGET pdf-merge OUTPUT_SCRIPT deploy_script
+            DEPLOY_TOOL_OPTIONS "-libpath=$<TARGET_FILE_DIR:qpdf::libqpdf>")
     endif()
-    qt_generate_deploy_app_script(TARGET pdf-merge OUTPUT_SCRIPT deploy_script)
     install(SCRIPT ${deploy_script})
 endif()
 

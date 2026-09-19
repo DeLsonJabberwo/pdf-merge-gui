@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Pdf Concurrent)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Pdf Concurrent Svg)
 # qpdf's version config enforces same-major compatibility. Check our minimum
 # separately so an installed qpdf 12 is not rejected by a request for qpdf 11.
 find_package(qpdf CONFIG REQUIRED)
@@ -24,8 +24,14 @@ qt_add_executable(pdf-merge WIN32 MACOSX_BUNDLE
     src/mainwindow.cpp src/mainwindow.h
 )
 target_link_libraries(pdf-merge PRIVATE
-    Qt6::Widgets Qt6::Pdf Qt6::Concurrent qpdf::libqpdf
+    Qt6::Widgets Qt6::Pdf Qt6::Concurrent Qt6::Svg qpdf::libqpdf
 )
+target_compile_definitions(pdf-merge PRIVATE PDFMERGE_VERSION="${PROJECT_VERSION}")
+option(PDFMERGE_PACKAGING "Enable release packaging and the package self-check" OFF)
+if(PDFMERGE_PACKAGING)
+    target_sources(pdf-merge PRIVATE packaging/check.cpp)
+    target_compile_definitions(pdf-merge PRIVATE PDFMERGE_PACKAGING)
+endif()
 if(MSVC)
     target_compile_options(pdf-merge PRIVATE /W4 /utf-8)
 else()
@@ -36,6 +42,14 @@ set_target_properties(pdf-merge PROPERTIES
     MACOSX_BUNDLE_GUI_IDENTIFIER "org.pdfmerge.desktop"
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
 )
+if(APPLE)
+    # Declare PDF document support so Finder offers Open with once the bundle
+    # has been launched from its installed location. The template carries the
+    # keys Qt's default plist sets, plus the document type declarations.
+    set_target_properties(pdf-merge PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/packaging/Info.plist.in"
+    )
+endif()
 
 include(GNUInstallDirs)
 install(TARGETS pdf-merge
@@ -47,9 +61,19 @@ if(UNIX AND NOT APPLE)
     install(FILES packaging/pdf-merge.svg DESTINATION share/icons/hicolor/scalable/apps)
 endif()
 
-# Qt's deployment script bundles Qt on Windows/macOS. Package qpdf and its
-# runtime dependencies alongside it using the chosen dependency manager.
+# Release builds use qpdf with static zlib/jpeg dependencies. Qt's deployment
+# tools handle Qt and, on macOS, qpdf's dylib. Windows needs qpdf copied explicitly.
 if(WIN32 OR APPLE)
+    if(WIN32)
+        get_target_property(qpdf_type qpdf::libqpdf TYPE)
+        if(qpdf_type STREQUAL "SHARED_LIBRARY")
+            install(FILES $<TARGET_FILE:qpdf::libqpdf> DESTINATION ${CMAKE_INSTALL_BINDIR})
+        endif()
+    endif()
     qt_generate_deploy_app_script(TARGET pdf-merge OUTPUT_SCRIPT deploy_script)
     install(SCRIPT ${deploy_script})
+endif()
+
+if(PDFMERGE_PACKAGING)
+    include(packaging/Packaging.cmake)
 endif()

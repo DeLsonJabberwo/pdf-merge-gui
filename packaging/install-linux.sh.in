@@ -1,0 +1,85 @@
+#!/bin/sh
+set -eu
+
+repository="@GITHUB_REPOSITORY@"
+version="${PDF_MERGE_VERSION:-@VERSION@}"
+case $(uname -m) in
+    x86_64|amd64) arch=x86_64 ;;
+    *) echo "PDF Merge currently provides Linux packages only for x86-64." >&2; exit 1 ;;
+esac
+
+data_home=${XDG_DATA_HOME:-"$HOME/.local/share"}
+bin_home=${XDG_BIN_HOME:-"$HOME/.local/bin"}
+app_dir="$data_home/pdf-merge"
+desktop_dir="$data_home/applications"
+icon_dir="$data_home/icons/hicolor/scalable/apps"
+
+if [ "${1:-}" = "--uninstall" ]; then
+    rm -f "$bin_home/pdf-merge" "$desktop_dir/org.pdfmerge.desktop" \
+        "$icon_dir/pdf-merge.svg"
+    rm -rf "$app_dir"
+    command -v update-desktop-database >/dev/null 2>&1 && \
+        update-desktop-database "$desktop_dir" >/dev/null 2>&1 || true
+    echo "PDF Merge was removed."
+    exit 0
+fi
+
+asset="pdf-merge-$version-linux-$arch.AppImage"
+base="https://github.com/$repository/releases/download/v$version"
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+
+download()
+{
+    if command -v curl >/dev/null 2>&1; then
+        curl --fail --location --retry 3 --output "$2" "$1"
+    elif command -v wget >/dev/null 2>&1; then
+        wget --output-document="$2" "$1"
+    else
+        echo "Install curl or wget, then run this installer again." >&2
+        exit 1
+    fi
+}
+download "$base/$asset" "$tmp/$asset"
+download "$base/pdf-merge.svg" "$tmp/pdf-merge.svg"
+download "$base/SHA256SUMS" "$tmp/SHA256SUMS"
+
+for file in "$asset" pdf-merge.svg; do
+    checksum=$(awk -v name="$file" '$2 == name { print $1; exit }' "$tmp/SHA256SUMS")
+    if [ -z "$checksum" ]; then
+        echo "SHA256SUMS has no entry for $file." >&2
+        exit 1
+    fi
+    actual=$(sha256sum "$tmp/$file" | cut -d ' ' -f1)
+    if [ "$actual" != "$checksum" ]; then
+        echo "Checksum verification failed for $file." >&2
+        exit 1
+    fi
+done
+
+mkdir -p "$app_dir" "$bin_home" "$desktop_dir" "$icon_dir"
+install -m 0755 "$tmp/$asset" "$app_dir/pdf-merge.AppImage"
+install -m 0644 "$tmp/pdf-merge.svg" "$icon_dir/pdf-merge.svg"
+ln -sfn "$app_dir/pdf-merge.AppImage" "$bin_home/pdf-merge"
+escaped_app=$(printf '%s' "$app_dir/pdf-merge.AppImage" | sed 's/[\\"`$]/\\&/g')
+cat > "$desktop_dir/org.pdfmerge.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=PDF Merge
+Comment=Arrange PDF pages and export one document
+Exec="$escaped_app" %F
+Icon=pdf-merge
+Terminal=false
+Categories=Office;Utility;
+MimeType=application/pdf;
+Keywords=PDF;Merge;Combine;Pages;
+StartupNotify=true
+EOF
+command -v update-desktop-database >/dev/null 2>&1 && \
+    update-desktop-database "$desktop_dir" >/dev/null 2>&1 || true
+
+echo "PDF Merge $version was installed for the current user."
+case ":$PATH:" in
+    *":$bin_home:"*) ;;
+    *) echo "Add $bin_home to PATH to run pdf-merge from a terminal." ;;
+esac

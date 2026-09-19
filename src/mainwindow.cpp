@@ -19,10 +19,12 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPainter>
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QSettings>
 #include <QSplitter>
+#include <QSvgRenderer>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QStyleHints>
@@ -247,7 +249,9 @@ void MainWindow::buildUi()
 
 void MainWindow::buildMenus()
 {
-    auto* file = menuBar()->addMenu(tr("&File"));
+    auto* menuBar = new QMenuBar(this);
+
+    auto* file = menuBar->addMenu(tr("&File"));
     auto* add = file->addAction(tr("&Add PDFs…"), this, &MainWindow::browse);
     add->setShortcut(QKeySequence::Open);
     exportAction_ = file->addAction(tr("&Export PDF…"), this, &MainWindow::exportDocument);
@@ -257,7 +261,7 @@ void MainWindow::buildMenus()
     quit->setShortcut(QKeySequence::Quit);
     quit->setMenuRole(QAction::QuitRole);
 
-    auto* edit = menuBar()->addMenu(tr("&Edit"));
+    auto* edit = menuBar->addMenu(tr("&Edit"));
     auto* undo = assembly_->undoStack()->createUndoAction(this, tr("&Undo"));
     undo->setShortcut(QKeySequence::Undo);
     auto* redo = assembly_->undoStack()->createRedoAction(this, tr("&Redo"));
@@ -279,7 +283,7 @@ void MainWindow::buildMenus()
                                    [this] { assembly_->makeStandalone(tree_->currentIndex()); });
     outside->setShortcut(QKeySequence(Qt::ALT | Qt::Key_Left));
 
-    auto* view = menuBar()->addMenu(tr("&View"));
+    auto* view = menuBar->addMenu(tr("&View"));
     auto* appearance = view->addMenu(tr("Appearance"));
     auto* themes = new QActionGroup(this);
     const auto chosen = QSettings().value(QStringLiteral("theme"), QStringLiteral("system")).toString();
@@ -301,7 +305,7 @@ void MainWindow::buildMenus()
     view->addAction(tr("Fit width"), preview_, &Preview::fitWidth)
         ->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
 
-    auto* help = menuBar()->addMenu(tr("&Help"));
+    auto* help = menuBar->addMenu(tr("&Help"));
     auto* about = help->addAction(tr("About PDF Merge"), this, [this] {
         QMessageBox::about(this, tr("About PDF Merge"),
             tr("<b>PDF Merge 0.1</b><p>Arrange pages. Export one PDF.</p>"
@@ -311,6 +315,19 @@ void MainWindow::buildMenus()
                "Exports are not password protected.</p>"));
     });
     about->setMenuRole(QAction::AboutRole);
+
+    titleLabel_ = new QLabel;
+    titleLabel_->setObjectName(QStringLiteral("menuBarTitle"));
+    titleLabel_->setContentsMargins(12, 0, 4, 0);
+
+    auto* container = new QWidget;
+    container->setObjectName(QStringLiteral("menuBarContainer"));
+    auto* layout = new QHBoxLayout(container);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+    layout->addWidget(titleLabel_);
+    layout->addWidget(menuBar, 1);
+    setMenuWidget(container);
 }
 
 void MainWindow::browse()
@@ -523,6 +540,7 @@ void MainWindow::applyTheme()
     palette.setColor(QPalette::Disabled, QPalette::Text, QColor(secondary));
     palette.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(secondary));
     qApp->setPalette(palette);
+    const QString menuBarHover = QColor(accent).darker(dark ? 120 : 110).name();
     qApp->setStyleSheet(QStringLiteral(R"(
         QMainWindow, QStackedWidget { background: %1; }
         QWidget#sidebar, QWidget#toolbar { background: %2; }
@@ -540,7 +558,6 @@ void MainWindow::applyTheme()
         QPushButton#primary:focus { border: 2px solid %3; }
         QPushButton#addButton { color: %6; border-style: dashed; }
         QPushButton#emptyState { background: %1; border: 2px solid transparent; }
-        QPushButton#emptyState:focus { border-color: %6; }
         QLabel#emptyPlus { color: %6; font-size: 72px; font-weight: 300; }
         QLabel#emptyPrompt { color: %3; font-size: 20px; font-weight: 500; }
         QTreeView { background: %2; border: none; outline: none; }
@@ -549,11 +566,44 @@ void MainWindow::applyTheme()
         QWidget#exportFooter { border-top: 1px solid %5; }
         QSplitter::handle { background: %5; width: 1px; }
         QStatusBar { color: %4; background: %2; border-top: 1px solid %5; }
-        QMenuBar, QMenu { background: %2; color: %3; }
-        QMenuBar::item:selected, QMenu::item:selected { background: %7; color: %3; }
+        QWidget#menuBarContainer { background: %6; min-height: 40px; }
+        QMenuBar { background: transparent; color: %8; }
+        QMenuBar::item { background: transparent; padding: 10px 12px; }
+        QMenuBar::item:selected { background: %10; color: %8; }
+        QMenu { background: %2; color: %3; }
+        QMenu::item:selected { background: %7; color: %3; }
         QToolTip { background: %2; color: %3; border: 1px solid %5; padding: 4px; }
     )").arg(background, surface, text, secondary, border, accent, selection, accentText,
-            QColor(accent).lighter(dark ? 110 : 108).name()));
+            QColor(accent).lighter(dark ? 110 : 108).name(), menuBarHover));
+    updateTitlePixmap();
+}
+
+void MainWindow::updateTitlePixmap()
+{
+    if (!titleLabel_)
+        return;
+
+    const bool dark = theme_ == QStringLiteral("dark")
+        || (theme_ == QStringLiteral("system") && qApp->styleHints()->colorScheme() == Qt::ColorScheme::Dark);
+    const QString fill = dark ? QStringLiteral("#242528") : QStringLiteral("#FFFFFF");
+
+    const QString svg = QStringLiteral(
+        R"(<svg xmlns="http://www.w3.org/2000/svg" width="128" height="34" viewBox="0 0 128 34">
+            <text x="12" y="22" font-family="sans-serif" font-size="22" font-weight="500" fill="%1">PDF Merge</text>
+        </svg>)").arg(fill);
+
+    QSvgRenderer renderer(svg.toUtf8());
+    // QSvgRenderer mis-scales <text> when painting onto a DPR > 1 painter
+    // (text is drawn twice as large as the vector content). Render at DPR 1
+    // and apply the ratio to the finished image instead.
+    QImage image(renderer.defaultSize() * 2, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    renderer.render(&painter);
+    painter.end();
+    QPixmap pixmap = QPixmap::fromImage(std::move(image));
+    pixmap.setDevicePixelRatio(2);
+    titleLabel_->setPixmap(pixmap);
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* event)

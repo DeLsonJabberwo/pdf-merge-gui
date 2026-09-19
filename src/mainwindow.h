@@ -35,6 +35,7 @@ private:
     void exportDocument();
     void applyTheme();
     void setTheme(const QString& theme);
+    void updateTitlePixmap();
 
     AssemblyModel* assembly_;
     DocumentTree* tree_ = nullptr;
@@ -44,6 +45,7 @@ private:
     QLabel* pageLabel_ = nullptr;
     QLabel* countLabel_ = nullptr;
     QLabel* zoomLabel_ = nullptr;
+    QLabel* titleLabel_ = nullptr;
     QPushButton* exportButton_ = nullptr;
     QCheckBox* openAfter_ = nullptr;
     QAction* exportAction_ = nullptr;

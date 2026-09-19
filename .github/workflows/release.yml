@@ -1,0 +1,265 @@
+name: Package release
+
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  QT_VERSION: 6.8.3
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  resources:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - id: version
+        name: Read and check version
+        shell: bash
+        run: |
+          version=$(sed -nE 's/^project\(PDFMerge VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt)
+          test -n "$version"
+          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "Tag $GITHUB_REF_NAME does not match CMake version $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Install resource tools
+        run: sudo apt-get update && sudo apt-get install -y cmake librsvg2-bin imagemagick
+      - name: Prepare icons and notices
+        run: packaging/prepare-resources.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: package-resources
+          path: build-resources
+          retention-days: 1
+
+  linux:
+    needs: resources
+    runs-on: ubuntu-24.04
+    # Build inside Ubuntu 22.04 so packages link glibc 2.35 and run on older
+    # distributions. The runner label stays supported; the container pins glibc.
+    container:
+      image: ubuntu:22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: package-resources
+          path: build-resources
+      - name: Install system tools
+        run: |
+          apt-get update
+          apt-get install -y build-essential ninja-build patchelf libfuse2 file curl python3-pip
+          pip3 install --prefix /usr/local "cmake>=3.24,<4"
+      - name: Install Qt
+        uses: jurplel/install-qt-action@bcb88e3bed2e992f5f9e24c0f9e364a231d278eb # v4.4.0
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: linux_gcc_64
+          modules: qtpdf
+          cache: true
+      - name: Build qpdf
+        run: |
+          cmake -S packaging/dependencies -B build-dependencies -G Ninja \
+            -DCMAKE_INSTALL_PREFIX="$PWD/dependencies"
+          cmake --build build-dependencies --target qpdf
+      - name: Build and stage application
+        run: |
+          cmake -S . -B build-release -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR;$PWD/dependencies" \
+            -DPDFMERGE_PACKAGING=ON \
+            -DPDFMERGE_PACKAGE_ARCH=x86_64 \
+            -DPDFMERGE_PACKAGE_RESOURCES="$PWD/build-resources"
+          cmake --build build-release
+          DESTDIR="$PWD/AppDir" cmake --install build-release --prefix /usr
+      - name: Build AppImage and deb
+        env:
+          VERSION: ${{ needs.resources.outputs.version }}
+          EXTRA_QT_MODULES: waylandcompositor
+          EXTRA_PLATFORM_PLUGINS: libqwayland-egl.so;libqwayland-generic.so
+        run: |
+          mkdir tools release-assets
+          curl -fL --retry 3 https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage -o tools/linuxdeploy-x86_64.AppImage
+          curl -fL --retry 3 https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/1-alpha-20250213-1/linuxdeploy-plugin-qt-x86_64.AppImage -o tools/linuxdeploy-plugin-qt-x86_64.AppImage
+          printf '%s  %s\n' c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d tools/linuxdeploy-x86_64.AppImage | sha256sum -c --strict
+          printf '%s  %s\n' 15106be885c1c48a021198e7e1e9a48ce9d02a86dd0a1848f00bdbf3c1c92724 tools/linuxdeploy-plugin-qt-x86_64.AppImage | sha256sum -c --strict
+          chmod +x tools/*.AppImage
+          export LD_LIBRARY_PATH="$PWD/dependencies/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export QMAKE="$QT_ROOT_DIR/bin/qmake"
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          tools/linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --desktop-file AppDir/usr/share/applications/org.pdfmerge.desktop \
+            --icon-file AppDir/usr/share/icons/hicolor/scalable/apps/pdf-merge.svg \
+            --executable AppDir/usr/bin/pdf-merge \
+            --plugin qt --output appimage
+          appimage=$(find . -maxdepth 1 -name '*.AppImage' -print -quit)
+          test -n "$appimage"
+          mv "$appimage" "release-assets/pdf-merge-$VERSION-linux-x86_64.AppImage"
+          packaging/package-deb.sh AppDir "$VERSION" \
+            "release-assets/pdf-merge-$VERSION-linux-x86_64.deb"
+      - name: Check packaged applications
+        env:
+          QT_QPA_PLATFORM: offscreen
+          APPIMAGE_EXTRACT_AND_RUN: 1
+          VERSION: ${{ needs.resources.outputs.version }}
+        run: |
+          "release-assets/pdf-merge-$VERSION-linux-x86_64.AppImage" --check-package
+          dpkg-deb -x "release-assets/pdf-merge-$VERSION-linux-x86_64.deb" deb-root
+          deb-root/opt/pdf-merge/AppRun --check-package
+      - name: Prepare Linux installer
+        env:
+          VERSION: ${{ needs.resources.outputs.version }}
+        run: |
+          sed -e "s|@GITHUB_REPOSITORY@|$GITHUB_REPOSITORY|g" \
+              -e "s|@VERSION@|$VERSION|g" \
+              packaging/install-linux.sh.in > release-assets/install-linux.sh
+          chmod +x release-assets/install-linux.sh
+          cp packaging/pdf-merge.svg release-assets/
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-linux
+          path: release-assets/*
+          if-no-files-found: error
+
+  windows:
+    needs: resources
+    # windows-2025 does not ship NSIS, which CPack needs for the setup .exe.
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: package-resources
+          path: build-resources
+      - name: Install Qt
+        uses: jurplel/install-qt-action@bcb88e3bed2e992f5f9e24c0f9e364a231d278eb # v4.4.0
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          modules: qtpdf
+          cache: true
+      - name: Build qpdf
+        shell: pwsh
+        run: |
+          cmake -S packaging/dependencies -B build-dependencies `
+            -DCMAKE_INSTALL_PREFIX="$pwd/dependencies"
+          cmake --build build-dependencies --config Release --target qpdf
+      - name: Build and package application
+        shell: pwsh
+        run: |
+          cmake -S . -B build-release `
+            "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR;$pwd/dependencies" `
+            -DPDFMERGE_PACKAGING=ON `
+            -DPDFMERGE_PACKAGE_ARCH=x86_64 `
+            -DPDFMERGE_PACKAGE_RESOURCES="$pwd/build-resources"
+          cmake --build build-release --config Release
+          cmake --install build-release --config Release --prefix "$pwd/dist"
+          New-Item -ItemType Directory release-assets
+          cpack --config build-release/CPackConfig.cmake -B release-assets -C Release
+      - name: Check packaged application
+        shell: pwsh
+        run: |
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          & "$pwd/dist/bin/pdf-merge.exe" --check-package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-windows
+          path: |
+            release-assets/*.zip
+            release-assets/*.exe
+          if-no-files-found: error
+
+  macos:
+    needs: resources
+    strategy:
+      matrix:
+        include:
+          - runner: macos-26
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: package-resources
+          path: build-resources
+      - name: Prepare macOS icon
+        run: iconutil -c icns build-resources/pdf-merge.iconset -o build-resources/pdf-merge.icns
+      - name: Install Qt
+        uses: jurplel/install-qt-action@bcb88e3bed2e992f5f9e24c0f9e364a231d278eb # v4.4.0
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: clang_64
+          modules: qtpdf
+          cache: true
+      - name: Build qpdf
+        run: |
+          cmake -S packaging/dependencies -B build-dependencies -G Ninja \
+            -DCMAKE_INSTALL_PREFIX="$PWD/dependencies" \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
+          cmake --build build-dependencies --target qpdf
+      - name: Build and package application
+        run: |
+          cmake -S . -B build-release -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR;$PWD/dependencies" \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+            -DPDFMERGE_PACKAGING=ON \
+            -DPDFMERGE_PACKAGE_ARCH=${{ matrix.arch }} \
+            -DPDFMERGE_PACKAGE_RESOURCES="$PWD/build-resources"
+          cmake --build build-release
+          cmake --install build-release --prefix "$PWD/dist"
+          mkdir release-assets
+          cpack --config build-release/CPackConfig.cmake -B release-assets -C Release
+      - name: Check packaged application
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: dist/pdf-merge.app/Contents/MacOS/pdf-merge --check-package
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-macos-${{ matrix.arch }}
+          path: release-assets/*.dmg
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [resources, linux, windows, macos]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+      - name: Create checksums
+        working-directory: release-assets
+        run: sha256sum * > SHA256SUMS
+      - name: Create or update draft release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: PDF Merge ${{ needs.resources.outputs.version }}
+          draft: true
+          generate_release_notes: true
+          overwrite_files: true
+          files: release-assets/*

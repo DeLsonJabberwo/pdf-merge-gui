@@ -56,9 +56,52 @@ With a multi-configuration Windows generator, the executable is typically `build
 cmake --install build --config Release --prefix dist
 ```
 
-The install rules provide a Linux desktop entry and icon, and invoke Qt deployment on Windows/macOS. Distributable packages still need dependency verification, including qpdf and its runtime libraries. Platform installers, signing, and macOS notarization are not configured yet.
+The install rules provide a Linux desktop entry and icon and invoke Qt deployment on Windows and macOS. Release packages also include qpdf and the Qt libraries and plugins they need.
 
-This initial implementation has not been compiled or run on any platform yet.
+## Install a release
+
+Release downloads are available from this repository's **Releases** page.
+
+| Platform | Package | Notes |
+| --- | --- | --- |
+| Linux x86-64 | one-line installer, AppImage, or `.deb` | Ubuntu 22.04 or another distribution with glibc 2.35 or newer |
+| Windows x86-64 | Setup `.exe` or portable `.zip` | Windows 10 or 11 |
+| macOS Apple Silicon | `pdf-merge-<version>-macos-arm64.dmg` | macOS 12 or newer |
+| macOS Intel | `pdf-merge-<version>-macos-x86_64.dmg` | macOS 12 or newer |
+
+Linux users can install the latest release with a single command. It fetches `install-linux.sh` from the most recent published release, verifies its checksum, and installs for the current user:
+
+```sh
+curl -fsSL https://github.com/DeLsonJabberwo/pdf-merge-gui/releases/latest/download/install-linux.sh | sh
+```
+
+Running the command again updates an existing installation. Run `install-linux.sh --uninstall` to remove it.
+
+Prefer to review before running? Download `install-linux.sh` and `SHA256SUMS` from the same release, check the script, then run:
+
+```sh
+chmod +x install-linux.sh
+./install-linux.sh
+```
+
+You can instead make the AppImage executable and run it directly, or install the Debian package with `sudo apt install ./pdf-merge-*.deb`.
+
+The installers register PDF Merge in the file manager's Open with menu: Explorer on Windows, Finder on macOS, and desktop entries on Linux. Right-click a PDF and choose **Open with → PDF Merge** to add it to a new assembly. Registration never changes your default PDF viewer. The portable `.zip` is unregistered; use **Open with → Choose another app** and select `pdf-merge.exe` from the extracted folder.
+
+The initial packages are unsigned. Windows SmartScreen may require **More info → Run anyway**. On macOS, open the app once with **Control-click → Open**. Published releases include `SHA256SUMS`; the Linux installer checks its downloads against that file.
+
+## Make a release
+
+The `Package release` GitHub Actions workflow builds and checks every package on its native platform. A manual workflow run leaves the packages as workflow artifacts and does not create a GitHub release.
+
+To prepare a release:
+
+1. Set the version in the `project(PDFMerge VERSION ...)` line in `CMakeLists.txt`.
+2. Commit the release changes and push a matching tag, such as `v0.2.0`.
+3. Wait for every packaging job to pass.
+4. Review and publish the draft release GitHub Actions creates.
+
+If a draft already exists for the tag, the workflow updates it and replaces assets with the same names. Each package contains Qt, qpdf, and third-party license notices. The workflow uses Qt 6.8.3 and qpdf 12.2.0; update the pinned versions, source hashes, and notices together.
 
 ## Behavior and export scope
 

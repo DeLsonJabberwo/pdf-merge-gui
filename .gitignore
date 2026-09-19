@@ -1,5 +1,11 @@
 /build*/
 /dist/
+/dependencies/
+/AppDir/
+/deb-root/
+/release-assets/
+/build-resources/
+/tools/
 /CMakeUserPresets.json
 /.cache/
 /.idea/

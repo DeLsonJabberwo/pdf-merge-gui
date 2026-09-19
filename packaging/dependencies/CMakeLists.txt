@@ -37,10 +37,23 @@ ExternalProject_Add(jpeg
 if(WIN32)
     set(zlib_library "${CMAKE_INSTALL_PREFIX}/lib/zlibstatic.lib")
     set(jpeg_library "${CMAKE_INSTALL_PREFIX}/lib/jpeg-static.lib")
+    # qpdf installs its shared library with an install rule that covers the
+    # LIBRARY artifact kind, which does not exist on MSVC. Copy the runtime
+    # artifacts of the pinned qpdf 12.2.0 explicitly; MSVC is a multi-config
+    # generator, so they live in the Release subdirectory of the build tree.
+    set(qpdf_runtime
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <BINARY_DIR>/libqpdf/Release/qpdf30.dll
+            ${CMAKE_INSTALL_PREFIX}/bin
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <BINARY_DIR>/libqpdf/Release/qpdf.lib
+            ${CMAKE_INSTALL_PREFIX}/lib)
 else()
     set(zlib_library "${CMAKE_INSTALL_PREFIX}/lib/libz.a")
     set(jpeg_library "${CMAKE_INSTALL_PREFIX}/lib/libjpeg.a")
+    set(qpdf_runtime "")
 endif()
+
 ExternalProject_Add(qpdf
     DEPENDS zlib jpeg
     URL https://github.com/qpdf/qpdf/releases/download/v12.2.0/qpdf-12.2.0.tar.gz
@@ -59,4 +72,5 @@ ExternalProject_Add(qpdf
     BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target libqpdf
     INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR> --config Release --component lib
     COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR> --config Release --component dev
+    ${qpdf_runtime}
 )

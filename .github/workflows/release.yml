@@ -63,7 +63,7 @@ jobs:
           apt-get update
           # python-is-python3: install-qt-action runs its pre-check with
           # "python", which does not exist in the bare 22.04 container.
-          apt-get install -y build-essential ninja-build patchelf libfuse2 file curl python3 python-is-python3 python3-pip
+          apt-get install -y build-essential ninja-build patchelf libfuse2 file curl sudo python3 python-is-python3 python3-pip
           pip3 install --prefix /usr/local "cmake>=3.24,<4"
       - name: Install Qt
         uses: jurplel/install-qt-action@bcb88e3bed2e992f5f9e24c0f9e364a231d278eb # v4.4.0
@@ -192,6 +192,7 @@ jobs:
   macos:
     needs: resources
     strategy:
+      fail-fast: false
       matrix:
         include:
           - runner: macos-26

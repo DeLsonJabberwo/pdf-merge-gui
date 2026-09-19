@@ -44,24 +44,12 @@ if(WIN32)
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
     set(CPACK_NSIS_MODIFY_PATH OFF)
     set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "PDFMerge")
-    # Register PDF Merge with Explorer's Open with menu. This never changes
-    # the default PDF viewer; users can pick PDF Merge in Settings under
-    # Default apps. The NSIS install is per-machine, so the keys live in HKLM.
-    # Single-quoted NSIS strings keep the embedded double quotes intact.
-    set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS [=[
-WriteRegStr HKLM "Software\Classes\PDFMerge.Document" "" "PDF Merge Document"
-WriteRegStr HKLM "Software\Classes\PDFMerge.Document\DefaultIcon" "" "$INSTDIR\bin\pdf-merge.exe,0"
-WriteRegStr HKLM "Software\Classes\PDFMerge.Document\shell\open\command" "" '"$INSTDIR\bin\pdf-merge.exe" "%1"'
-WriteRegStr HKLM "Software\PDFMerge\Capabilities" "ApplicationName" "PDF Merge"
-WriteRegStr HKLM "Software\PDFMerge\Capabilities" "ApplicationDescription" "Arrange PDF pages and export one document"
-WriteRegStr HKLM "Software\PDFMerge\Capabilities\FileAssociations" ".pdf" "PDFMerge.Document"
-WriteRegStr HKLM "Software\RegisteredApplications" "PDF Merge" "Software\PDFMerge\Capabilities"
-]=])
-    set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS [=[
-DeleteRegKey HKLM "Software\PDFMerge"
-DeleteRegKey HKLM "Software\Classes\PDFMerge.Document"
-DeleteRegValue HKLM "Software\RegisteredApplications" "PDF Merge"
-]=])
+    # Register PDF Merge with Explorer's Open with menu. Keep the commands in
+    # raw NSIS files so CPack cannot corrupt their nested quotes and backslashes.
+    set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS
+        "!include \"${CMAKE_CURRENT_LIST_DIR}/windows-install.nsh\"")
+    set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS
+        "!include \"${CMAKE_CURRENT_LIST_DIR}/windows-uninstall.nsh\"")
 elseif(APPLE)
     set(CPACK_GENERATOR "DragNDrop")
     set(CPACK_PACKAGE_FILE_NAME "pdf-merge-${PROJECT_VERSION}-macos-${PDFMERGE_PACKAGE_ARCH}")

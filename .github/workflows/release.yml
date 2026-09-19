@@ -174,12 +174,17 @@ jobs:
           cmake --build build-release --config Release
           cmake --install build-release --config Release --prefix "$pwd/dist"
           New-Item -ItemType Directory release-assets
-          cpack --config build-release/CPackConfig.cmake -B release-assets -C Release
+          # Keep CPack's staging path short. NSIS cannot read paths longer than
+          # 260 characters, and some bundled Chromium notices are deeply nested.
+          cpack --config build-release/CPackConfig.cmake -B D:/p -C Release
           $cpackExit = $LASTEXITCODE
           if ($cpackExit -ne 0) {
-            Get-Content release-assets/_CPack_Packages/win64/NSIS/NSISOutput.log -ErrorAction SilentlyContinue
+            Get-Content D:/p/_CPack_Packages/win64/NSIS/NSISOutput.log -ErrorAction SilentlyContinue
             exit $cpackExit
           }
+          $packageName = "pdf-merge-${{ needs.resources.outputs.version }}-windows-x86_64"
+          Copy-Item D:/p/p.zip "release-assets/$packageName.zip"
+          Copy-Item D:/p/p.exe "release-assets/$packageName.exe"
       - name: Check packaged application
         shell: pwsh
         run: |
